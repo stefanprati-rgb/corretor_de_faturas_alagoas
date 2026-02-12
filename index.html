@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corretor de Faturas Alagoas Energia</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+
+    <!-- PDF-lib -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 space-y-6">
+
+        <!-- Cabeçalho -->
+        <header class="text-center space-y-4">
+            <img src="https://alagoasenergia.com.br/wp-content/uploads/elementor/thumbs/Group-3-1-r1cvnrg6mhd4l9j6hcggyqfdsvklhaioyxyftjbohw.png"
+                alt="Logo Alagoas Energia" class="mx-auto h-12 w-auto">
+            <h1 class="text-3xl font-bold text-slate-800">Corretor de Faturas Alagoas Energia</h1>
+            <p class="text-slate-500">Faça o upload das suas faturas para corrigir o valor da economia automaticamente.
+            </p>
+        </header>
+
+        <!-- Área de Upload -->
+        <section id="drop-area"
+            class="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center space-y-4 transition-colors">
+            <div class="flex justify-center">
+                <i data-lucide="file-up" class="w-12 h-12 text-slate-400"></i>
+            </div>
+            <label for="file-upload" class="file-input-button font-semibold">
+                <i data-lucide="upload" class="w-5 h-5"></i>
+                Selecionar Arquivos PDF
+            </label>
+            <input id="file-upload" type="file" accept=".pdf" multiple>
+            <p id="file-info" class="text-sm text-slate-500">ou arraste e solte os arquivos aqui</p>
+        </section>
+
+        <!-- Botão de Processar -->
+        <section class="space-y-3">
+            <button id="process-btn"
+                class="w-full bg-[#32a949] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#49a85c] transition-colors flex items-center justify-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                <span id="btn-text">Corrigir Faturas</span>
+                <div id="loader"
+                    class="hidden w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            </button>
+        </section>
+
+        <!-- Área de Logs e Resultados -->
+        <section class="space-y-4">
+            <div id="logs-container" class="hidden">
+                <h3 class="font-semibold text-slate-700">Progresso:</h3>
+                <pre id="logs"
+                    class="bg-slate-800 text-white text-sm rounded-lg p-4 h-40 overflow-y-auto font-mono"></pre>
+            </div>
+
+            <div id="results-container" class="hidden">
+                <h3 class="font-semibold text-slate-700">Arquivos Corrigidos:</h3>
+                <div id="results" class="space-y-2"></div>
+
+                <button id="download-csv-btn"
+                    class="hidden w-full bg-[#70d086] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#49a85c] transition-colors flex items-center justify-center gap-2 mt-4">
+                    <i data-lucide="sheet" class="w-5 h-5"></i>
+                    Baixar Relatório (CSV)
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Ativar ícones Lucide
+        lucide.createIcons();
+    </script>
+
+    <!-- Aplicação Principal -->
+    <script type="module" src="./js/app.js"></script>
+</body>
+
+</html>
