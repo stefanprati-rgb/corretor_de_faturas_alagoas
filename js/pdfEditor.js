@@ -47,19 +47,40 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
     let bar_x, bar_y, bar_width, bar_height;
 
     if (startIndex !== -1) {
-        // Capturar o bloco alvo (label + valor)
-        const blockItems = textItems.slice(startIndex, startIndex + 8);
+        // Capturando o item âncora para obter a linha de base (eixo Y)
+        const baseItem = textItems[startIndex];
+        const baseY = baseItem.transform[5];
+
+        // Capturar o bloco alvo agrupando apenas itens na mesma linha
+        const blockItems = [];
+        for (let i = startIndex; i < Math.min(startIndex + 15, textItems.length); i++) {
+            const item = textItems[i];
+            const itemY = item.transform[5];
+
+            // Tolerância de 5 pontos na diferença de Y
+            if (Math.abs(itemY - baseY) > 5) {
+                break; // Se a diferença for grande, é de outra linha
+            }
+
+            blockItems.push(item);
+        }
 
         // Extrair todas as coordenadas do bloco
         const xs = blockItems.map(t => t.transform[4]);
         const ys = blockItems.map(t => t.transform[5]);
 
         const minX = Math.min(...xs);
+        // Para maxX original, usava o início do último termo. Assim o PADDING_RIGHT compensava.
         const maxX = Math.max(...xs);
         const minY = Math.min(...ys);
         const maxY = Math.max(...ys);
 
-        const textHeight = maxY - minY;
+        // Se todos os itens estão na mesma linha exata, maxY - minY será próximo de 0.
+        // Vamos garantir uma altura de texto básica (ex: 12)
+        let textHeight = maxY - minY;
+        if (textHeight < 8) {
+            textHeight = 12; // Altura de fonte razoável
+        }
 
         // 1. Cálculo Dinâmico baseado na Bounding Box real com correção de offset visual
         bar_x = minX - PADDING_LEFT;
