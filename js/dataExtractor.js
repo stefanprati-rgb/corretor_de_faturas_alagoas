@@ -65,9 +65,17 @@ function findValueNearLabel(textItems, labelKeywords, maxDistance = 10) {
  * @returns {{subtotal_distribuidora: number, subtotal_contribuicao: number, valorOriginal: number}|null}
  */
 export function extractInvoiceData(textItems, fullText) {
-    // Tentar extração por proximidade primeiro (mais robusta)
+    // Tentar usar o método por regex primeiro, pois ele avalia o bloco completo e é mais específico
+    const dadosRegex = extractInvoiceDataFallback(fullText);
+    if (dadosRegex) {
+        return dadosRegex;
+    }
+
+    console.warn("Regex falhou, tentando extração por proximidade (fallback)...");
+
+    // Fallback: extração por proximidade (mais frágil a falsos positivos)
     const distribuidora = findValueNearLabel(textItems, ['consumindo', 'distribuidora'], 15);
-    const contribuicao = findValueNearLabel(textItems, ['contribuição', 'mensal'], 15);
+    const contribuicao = findValueNearLabel(textItems, ['contribui[cç][aã]o', 'mensal'], 15);
     const economia = findValueNearLabel(textItems, ['total', 'economia'], 15);
 
     // Se encontrou todos os valores, retornar
@@ -79,8 +87,7 @@ export function extractInvoiceData(textItems, fullText) {
         };
     }
 
-    // Fallback: usar regex no texto completo (método original)
-    return extractInvoiceDataFallback(fullText);
+    return null;
 }
 
 /**
@@ -96,11 +103,19 @@ function extractInvoiceDataFallback(texto) {
         return isNaN(num) ? null : num;
     };
 
-    const secaoDistribuidora = texto.match(/Consumindo\s+da\s+Distribuidora([\s\S]*?)Contribuição\s+Mensal/i);
-    const secaoContribuicao = texto.match(/Contribuição\s+Mensal([\s\S]*?)Total\s+da\s+sua\s+Economia/i);
-    const matchEconomia = texto.match(/Total\s+da\s+sua\s+Economia\s+R\$\s*([\d.,]+)/i);
+    const regexDistribuidora = /Consumindo\s+da\s+Distribuidora([\s\S]*?)Contribui[cç][aã]o\s+Mensal/i;
+    const regexContribuicao = /Contribui[cç][aã]o\s+Mensal([\s\S]*?)Total\s+(?:da\s+sua\s+)?Economia/i;
+    const regexEconomia = /Total\s+(?:da\s+sua\s+)?Economia[\s\S]*?R\$\s*([\d.,]+)/i;
+
+    const secaoDistribuidora = texto.match(regexDistribuidora);
+    const secaoContribuicao = texto.match(regexContribuicao);
+    const matchEconomia = texto.match(regexEconomia);
 
     if (!secaoDistribuidora || !secaoContribuicao || !matchEconomia) {
+        console.error("Falha na regex. Texto do PDF:", texto);
+        console.log("Secao Distribuidora encontrada?", !!secaoDistribuidora);
+        console.log("Secao Contribuicao encontrada?", !!secaoContribuicao);
+        console.log("Match Economia encontrado?", !!matchEconomia);
         return null;
     }
 
@@ -111,6 +126,7 @@ function extractInvoiceDataFallback(texto) {
     const ultimoContribuicao = valoresContribuicao[valoresContribuicao.length - 1];
 
     if (!ultimoDistribuidora || !ultimoContribuicao) {
+        console.error("Valores R$ não encontrados nas seções.");
         return null;
     }
 
@@ -121,5 +137,8 @@ function extractInvoiceDataFallback(texto) {
     };
 
     const allDataValid = Object.values(dados).every(v => v !== null && v > 0);
+    if (!allDataValid) {
+        console.error("Dados extraídos são inválidos/zero:", dados);
+    }
     return allDataValid ? dados : null;
 }
