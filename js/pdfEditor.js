@@ -13,93 +13,95 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
     const { PDFDocument, rgb, StandardFonts } = PDFLib;
     const pdfDoc = await PDFDocument.load(arrayBuffer);
     const page = pdfDoc.getPages()[1]; // Página 2
-    const pageHeight = page.getHeight();
+
+    const normalizeText = (value) => value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const getItemX = (item) => item.transform[4];
+    const getItemY = (item) => item.transform[5];
+    const getItemRight = (item) => getItemX(item) + (item.width || 0);
+
+    const groupItemsByLine = (items, yTolerance = 4) => {
+        const sortedItems = [...items]
+            .filter(item => item.str && item.str.trim())
+            .sort((a, b) => getItemY(b) - getItemY(a) || getItemX(a) - getItemX(b));
+
+        const lines = [];
+        for (const item of sortedItems) {
+            const itemY = getItemY(item);
+            let line = lines.find(candidate => Math.abs(candidate.y - itemY) <= yTolerance);
+            if (!line) {
+                line = { y: itemY, items: [] };
+                lines.push(line);
+            }
+            line.items.push(item);
+            line.y = (line.y * (line.items.length - 1) + itemY) / line.items.length;
+        }
+
+        return lines.map(line => ({
+            ...line,
+            items: line.items.sort((a, b) => getItemX(a) - getItemX(b)),
+        }));
+    };
 
     // --- DETECÇÃO DINÂMICA DO BLOCO ---
-    let startIndex = -1;
-    for (let i = 0; i < textItems.length; i++) {
-        const text = textItems[i].str.trim().toLowerCase();
-        if (text.includes('total')) {
-            // Confirmar proximidade de "Economia" nos próximos itens
-            const nextFive = textItems.slice(i, i + 5);
-            if (nextFive.some(t => t.str.toLowerCase().includes('economia'))) {
-                startIndex = i;
-                break;
-            }
-        }
-    }
+    const targetLine = groupItemsByLine(textItems).find(line => {
+        const lineText = normalizeText(line.items.map(item => item.str).join(' '));
+        return lineText.includes('total cenario distribuidora')
+            && lineText.includes('cenario alagoas energia');
+    });
 
     // --- CONFIGURAÇÕES DE PADDING ---
-    const PADDING_LEFT = 28;
-    const PADDING_RIGHT = 80;
-    const PADDING_TOP = 14;
-    const PADDING_BOTTOM = 10;
+    const PADDING_LEFT = 18;
+    const PADDING_RIGHT = 18;
+    const PADDING_TOP = 8;
+    const PADDING_BOTTOM = 8;
     const rectColor = rgb(0x33 / 255, 0xaa / 255, 0x48 / 255);
     const textColor = rgb(1, 1, 1);
-    const textSize = 11;
+    const textSize = 9;
 
     // Carregar fonte
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const labelText = 'Total da sua Economia';
+    const labelText = 'Total Cenário Distribuidora - Cenário Alagoas Energia';
     const valueText = `R$ ${valorCorretoStr}`;
 
     // Calcular posição da barra
     let bar_x, bar_y, bar_width, bar_height;
 
-    if (startIndex !== -1) {
-        // Capturando o item âncora para obter a linha de base (eixo Y)
-        const baseItem = textItems[startIndex];
-        const baseY = baseItem.transform[5];
-
-        // Capturar o bloco alvo agrupando apenas itens na mesma linha
-        const blockItems = [];
-        for (let i = startIndex; i < Math.min(startIndex + 15, textItems.length); i++) {
-            const item = textItems[i];
-            const itemY = item.transform[5];
-
-            // Tolerância de 5 pontos na diferença de Y
-            if (Math.abs(itemY - baseY) > 5) {
-                break; // Se a diferença for grande, é de outra linha
-            }
-
-            blockItems.push(item);
-        }
-
+    if (targetLine) {
         // Extrair todas as coordenadas do bloco
-        const xs = blockItems.map(t => t.transform[4]);
-        const ys = blockItems.map(t => t.transform[5]);
+        const blockItems = targetLine.items;
+        const xs = blockItems.map(getItemX);
+        const rights = blockItems.map(getItemRight);
+        const ys = blockItems.map(getItemY);
 
         const minX = Math.min(...xs);
-        // Para maxX original, usava o início do último termo. Assim o PADDING_RIGHT compensava.
-        const maxX = Math.max(...xs);
+        const maxX = Math.max(...rights);
         const minY = Math.min(...ys);
         const maxY = Math.max(...ys);
 
-        // Se todos os itens estão na mesma linha exata, maxY - minY será próximo de 0.
-        // Vamos garantir uma altura de texto básica (ex: 12)
-        let textHeight = maxY - minY;
-        if (textHeight < 8) {
-            textHeight = 12; // Altura de fonte razoável
-        }
+        // A coordenada Y do PDF.js é a baseline; usamos uma altura estável para cobrir a linha original.
+        const textHeight = Math.max(maxY - minY, 11);
 
-        // 1. Cálculo Dinâmico baseado na Bounding Box real com correção de offset visual
+        // Cálculo dinâmico baseado na linha "Total Cenário..." real.
         bar_x = minX - PADDING_LEFT;
-        // Compensação de baseline (0.35 da altura do texto para centralizar visualmente)
-        bar_y = minY - PADDING_BOTTOM + (textHeight * 0.35);
+        bar_y = minY - PADDING_BOTTOM - 2;
 
         bar_width = (maxX - minX) + PADDING_LEFT + PADDING_RIGHT;
         bar_height = textHeight + PADDING_TOP + PADDING_BOTTOM;
-
-        // DEBUG (opcional): console.log(`Block detected: X[${minX}-${maxX}] Y[${minY}-${maxY}]`);
     } else {
         // FALLBACK: coordenadas fixas (usando sistema de pontos)
         const mmToPoints = (mm) => mm * 2.83465;
-        bar_x = mmToPoints(58.674) - PADDING_LEFT;
-        bar_y = mmToPoints(231.902) - PADDING_BOTTOM;
-        bar_width = mmToPoints(139) + PADDING_LEFT + PADDING_RIGHT;
-        bar_height = 32;
+        bar_x = mmToPoints(14.866) - PADDING_LEFT;
+        bar_y = mmToPoints(48.129) - PADDING_BOTTOM;
+        bar_width = mmToPoints(181) + PADDING_LEFT + PADDING_RIGHT;
+        bar_height = 27;
 
-        console.warn("Bloco não identificado. Usando fallback.");
+        console.warn("Linha 'Total Cenário Distribuidora - Cenário Alagoas Energia' não identificada. Usando fallback.");
     }
 
     // --- DESENHAR TARJA VERDE ---
@@ -125,7 +127,7 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
 
     const valueWidthReal = helveticaBold.widthOfTextAtSize(valueText, textSize);
     page.drawText(valueText, {
-        x: bar_x + bar_width - valueWidthReal - 20, // Alinhamento à direita com margem segura
+        x: bar_x + bar_width - valueWidthReal - PADDING_RIGHT,
         y: textY,
         font: helveticaBold,
         size: textSize,
