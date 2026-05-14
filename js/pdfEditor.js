@@ -56,8 +56,8 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
     });
 
     // --- CONFIGURAÇÕES DE PADDING ---
-    const PADDING_LEFT = 18;
-    const PADDING_RIGHT = 18;
+    const PADDING_LEFT = 2;
+    const PADDING_RIGHT = 2;
     const PADDING_TOP = 8;
     const PADDING_BOTTOM = 8;
     const rectColor = rgb(0x33 / 255, 0xaa / 255, 0x48 / 255);
@@ -87,7 +87,7 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
         // A coordenada Y do PDF.js é a baseline; usamos uma altura estável para cobrir a linha original.
         const textHeight = Math.max(maxY - minY, 11);
 
-        // Cálculo dinâmico baseado na linha "Total Cenário..." real.
+        // Mantém a sobreposição dentro da faixa original para preservar os cantos arredondados.
         bar_x = minX - PADDING_LEFT;
         bar_y = minY - PADDING_BOTTOM - 2;
 
@@ -96,9 +96,9 @@ export async function createCorrectedPDF(arrayBuffer, valorCorretoStr, textItems
     } else {
         // FALLBACK: coordenadas fixas (usando sistema de pontos)
         const mmToPoints = (mm) => mm * 2.83465;
-        bar_x = mmToPoints(14.866) - PADDING_LEFT;
+        bar_x = mmToPoints(14.866);
         bar_y = mmToPoints(48.129) - PADDING_BOTTOM;
-        bar_width = mmToPoints(181) + PADDING_LEFT + PADDING_RIGHT;
+        bar_width = mmToPoints(181);
         bar_height = 27;
 
         console.warn("Linha 'Total Cenário Distribuidora - Cenário Alagoas Energia' não identificada. Usando fallback.");

@@ -3,10 +3,10 @@
  * Orquestra todos os módulos para processar e corrigir faturas em PDF
  */
 
-import { readPDF, extractPageText } from './pdfReader.js';
-import { extractInvoiceData } from './dataExtractor.js';
+import { readPDF, extractPageText } from './pdfReader.js?v=1.1.2';
+import { extractInvoiceData } from './dataExtractor.js?v=1.1.2';
 import { calculateCorrectEconomy } from './economyCalculator.js';
-import { createCorrectedPDF } from './pdfEditor.js';
+import { createCorrectedPDF } from './pdfEditor.js?v=1.1.2';
 import { downloadCSV } from './reportGenerator.js';
 import {
     initializeUI,
