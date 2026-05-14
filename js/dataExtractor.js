@@ -37,7 +37,12 @@ function findValueNearLabel(textItems, labelKeywords, maxDistance = 10) {
         const text = textItems[i].str.toLowerCase();
 
         // Verificar se contém alguma das keywords
-        if (keywords.some(keyword => text.includes(keyword.toLowerCase()))) {
+        if (keywords.some(keyword => {
+            if (keyword instanceof RegExp) {
+                return keyword.test(text);
+            }
+            return text.includes(keyword.toLowerCase());
+        })) {
             labelIndex = i;
             break;
         }
@@ -103,6 +108,43 @@ function extractInvoiceDataFallback(texto) {
         return isNaN(num) ? null : num;
     };
 
+    const getLastMoneyValue = (section) => {
+        const valores = [...section.matchAll(/R\$\s*([\d.,]+)/g)];
+        const ultimo = valores[valores.length - 1];
+        return ultimo ? getFloat(ultimo[1]) : null;
+    };
+
+    const getTotalAfterEquals = (section) => {
+        const valores = [...section.matchAll(/=\s*R\$\s*([\d.,]+)/g)];
+        const ultimo = valores[valores.length - 1];
+        return ultimo ? getFloat(ultimo[1]) : null;
+    };
+
+    // Layout atual da Alagoas Energia:
+    // "Cenário Distribuidora ... = R$ X", "Cenário Alagoas Energia ... = R$ Y"
+    // e "Total Cenário Distribuidora - Cenário Alagoas Energia R$ Z".
+    const regexCenarioDistribuidora = /Cen[aá]rio\s+Distribuidora([\s\S]*?)Cen[aá]rio\s+Alagoas\s+Energia/i;
+    const regexCenarioAlagoas = /Cen[aá]rio\s+Alagoas\s+Energia([\s\S]*?)Total\s+Cen[aá]rio\s+Distribuidora\s*-\s*Cen[aá]rio\s+Alagoas\s+Energia/i;
+    const regexEconomiaAtual = /Total\s+Cen[aá]rio\s+Distribuidora\s*-\s*Cen[aá]rio\s+Alagoas\s+Energia\s*R\$\s*([\d.,]+)/i;
+
+    const secaoCenarioDistribuidora = texto.match(regexCenarioDistribuidora);
+    const secaoCenarioAlagoas = texto.match(regexCenarioAlagoas);
+    const matchEconomiaAtual = texto.match(regexEconomiaAtual);
+
+    if (secaoCenarioDistribuidora && secaoCenarioAlagoas && matchEconomiaAtual) {
+        const dados = {
+            subtotal_distribuidora: getTotalAfterEquals(secaoCenarioDistribuidora[1]),
+            subtotal_contribuicao: getTotalAfterEquals(secaoCenarioAlagoas[1]),
+            valorOriginal: getFloat(matchEconomiaAtual[1])
+        };
+
+        const allDataValid = Object.values(dados).every(v => v !== null && v > 0);
+        if (!allDataValid) {
+            console.error("Dados extraídos do layout atual são inválidos/zero:", dados);
+        }
+        return allDataValid ? dados : null;
+    }
+
     const regexDistribuidora = /Consumindo\s+da\s+Distribuidora([\s\S]*?)Contribui[cç][aã]o\s+Mensal/i;
     const regexContribuicao = /Contribui[cç][aã]o\s+Mensal([\s\S]*?)Total\s+(?:da\s+sua\s+)?Economia/i;
     const regexEconomia = /Total\s+(?:da\s+sua\s+)?Economia[\s\S]*?R\$\s*([\d.,]+)/i;
@@ -119,20 +161,17 @@ function extractInvoiceDataFallback(texto) {
         return null;
     }
 
-    const valoresDistribuidora = [...secaoDistribuidora[1].matchAll(/R\$\s*([\d.,]+)/g)];
-    const valoresContribuicao = [...secaoContribuicao[1].matchAll(/R\$\s*([\d.,]+)/g)];
+    const subtotalDistribuidora = getLastMoneyValue(secaoDistribuidora[1]);
+    const subtotalContribuicao = getLastMoneyValue(secaoContribuicao[1]);
 
-    const ultimoDistribuidora = valoresDistribuidora[valoresDistribuidora.length - 1];
-    const ultimoContribuicao = valoresContribuicao[valoresContribuicao.length - 1];
-
-    if (!ultimoDistribuidora || !ultimoContribuicao) {
+    if (subtotalDistribuidora === null || subtotalContribuicao === null) {
         console.error("Valores R$ não encontrados nas seções.");
         return null;
     }
 
     const dados = {
-        subtotal_distribuidora: getFloat(ultimoDistribuidora[1]),
-        subtotal_contribuicao: getFloat(ultimoContribuicao[1]),
+        subtotal_distribuidora: subtotalDistribuidora,
+        subtotal_contribuicao: subtotalContribuicao,
         valorOriginal: getFloat(matchEconomia[1])
     };
 
