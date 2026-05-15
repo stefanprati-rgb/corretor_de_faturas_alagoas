@@ -31,32 +31,31 @@ function parseMoney(valorStr) {
 function findValueNearLabel(textItems, labelKeywords, maxDistance = 10) {
     const keywords = Array.isArray(labelKeywords) ? labelKeywords : [labelKeywords];
 
-    // Procurar pelo label
-    let labelIndex = -1;
     for (let i = 0; i < textItems.length; i++) {
         const text = textItems[i].str.toLowerCase();
 
         // Verificar se contém alguma das keywords
-        if (keywords.some(keyword => {
+        const isLabelMatch = keywords.some(keyword => {
             if (keyword instanceof RegExp) {
+                keyword.lastIndex = 0;
                 return keyword.test(text);
             }
             return text.includes(keyword.toLowerCase());
-        })) {
-            labelIndex = i;
-            break;
-        }
-    }
+        });
 
-    if (labelIndex === -1) return null;
+        if (!isLabelMatch) continue;
 
-    // Procurar valor monetário próximo ao label
-    for (let i = labelIndex; i < Math.min(labelIndex + maxDistance, textItems.length); i++) {
-        const text = textItems[i].str.trim();
+        // Procurar valor monetário próximo ao label
+        for (let j = i; j < Math.min(i + maxDistance, textItems.length); j++) {
+            const text = textItems[j].str.trim();
 
-        // Detectar padrão de valor monetário
-        if (text.match(/R\$|^\d+[.,]\d{2}$/)) {
-            return parseMoney(text);
+            // Detectar padrão de valor monetário
+            if (text.match(/R\$\s*|^\d{1,3}(?:\.\d{3})*[.,]\d{2}$/)) {
+                const value = parseMoney(text);
+                if (value !== null) {
+                    return value;
+                }
+            }
         }
     }
 
@@ -71,7 +70,7 @@ function findValueNearLabel(textItems, labelKeywords, maxDistance = 10) {
  */
 export function extractInvoiceData(textItems, fullText) {
     // Tentar usar o método por regex primeiro, pois ele avalia o bloco completo e é mais específico
-    const dadosRegex = extractInvoiceDataFallback(fullText);
+    const dadosRegex = extractInvoiceDataRegex(fullText);
     if (dadosRegex) {
         return dadosRegex;
     }
@@ -80,7 +79,7 @@ export function extractInvoiceData(textItems, fullText) {
 
     // Fallback: extração por proximidade (mais frágil a falsos positivos)
     const distribuidora = findValueNearLabel(textItems, ['consumindo', 'distribuidora'], 15);
-    const contribuicao = findValueNearLabel(textItems, ['contribui[cç][aã]o', 'mensal'], 15);
+    const contribuicao = findValueNearLabel(textItems, [/contribui[cç][aã]o/i, 'mensal'], 15);
     const economia = findValueNearLabel(textItems, ['total', 'economia'], 15);
 
     // Se encontrou todos os valores, retornar
@@ -96,28 +95,21 @@ export function extractInvoiceData(textItems, fullText) {
 }
 
 /**
- * Método fallback usando regex (original)
+ * Método principal usando regex (original)
  * @param {string} texto - Texto completo da página
  * @returns {{subtotal_distribuidora: number, subtotal_contribuicao: number, valorOriginal: number}|null}
  */
-function extractInvoiceDataFallback(texto) {
-    const getFloat = (valorStr) => {
-        if (!valorStr) return null;
-        const cleanNumberStr = valorStr.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-        const num = parseFloat(cleanNumberStr);
-        return isNaN(num) ? null : num;
-    };
-
+function extractInvoiceDataRegex(texto) {
     const getLastMoneyValue = (section) => {
         const valores = [...section.matchAll(/R\$\s*([\d.,]+)/g)];
         const ultimo = valores[valores.length - 1];
-        return ultimo ? getFloat(ultimo[1]) : null;
+        return ultimo ? parseMoney(ultimo[1]) : null;
     };
 
     const getTotalAfterEquals = (section) => {
         const valores = [...section.matchAll(/=\s*R\$\s*([\d.,]+)/g)];
         const ultimo = valores[valores.length - 1];
-        return ultimo ? getFloat(ultimo[1]) : null;
+        return ultimo ? parseMoney(ultimo[1]) : null;
     };
 
     // Layout atual da Alagoas Energia:
@@ -135,7 +127,7 @@ function extractInvoiceDataFallback(texto) {
         const dados = {
             subtotal_distribuidora: getTotalAfterEquals(secaoCenarioDistribuidora[1]),
             subtotal_contribuicao: getTotalAfterEquals(secaoCenarioAlagoas[1]),
-            valorOriginal: getFloat(matchEconomiaAtual[1])
+            valorOriginal: parseMoney(matchEconomiaAtual[1])
         };
 
         const allDataValid = Object.values(dados).every(v => v !== null && v > 0);
@@ -172,7 +164,7 @@ function extractInvoiceDataFallback(texto) {
     const dados = {
         subtotal_distribuidora: subtotalDistribuidora,
         subtotal_contribuicao: subtotalContribuicao,
-        valorOriginal: getFloat(matchEconomia[1])
+        valorOriginal: parseMoney(matchEconomia[1])
     };
 
     const allDataValid = Object.values(dados).every(v => v !== null && v > 0);
